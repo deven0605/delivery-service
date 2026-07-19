@@ -1,0 +1,69 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: delivery-service
+
+  datasource:
+    # Shared H2 file database — auth-service MUST start first (it owns ddl-auto: create
+    # for the delivery_partners table). AUTO_SERVER=TRUE lets every service JVM connect
+    # to the same file concurrently.
+    url: jdbc:h2:file:~/thalicloud-data/thalidb;AUTO_SERVER=TRUE;NON_KEYWORDS=USER
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      # 'update' only: this service reads/writes columns auth-service already
+      # defined on delivery_partners, and owns kyc_documents outright (created
+      # here, untouched by auth-service's ddl-auto:create on its own tables).
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+  servlet:
+    multipart:
+      max-file-size: 6MB
+      max-request-size: 6MB
+
+# Must match auth-service's JWT secret exactly so tokens issued at OTP verification
+# are accepted here without a round-trip to auth-service.
+jwt:
+  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+  access-token-expiry-ms: 900000   # 15 min — used only for expiry validation
+
+# Local MinIO (Tech Stack: "Document Upload — local MinIO now, AWS S3 future).
+minio:
+  endpoint: http://localhost:9000
+  access-key: admin
+  secret-key: password123
+  bucket: delivery-kyc-documents
+
+# FR-2.6 — enforced again server-side (client-side check alone is not trustworthy).
+document:
+  max-file-size-bytes: 5242880   # 5 MB
+  allowed-content-types: image/jpeg,image/png,application/pdf
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    com.thalicloud: DEBUG
+    org.springframework.security: INFO
