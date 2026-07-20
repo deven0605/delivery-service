@@ -1,6 +1,7 @@
 package com.thalicloud.delivery.dto.response;
 
 import com.thalicloud.delivery.entity.DeliveryPartner;
+import com.thalicloud.delivery.enums.DutyStatus;
 import com.thalicloud.delivery.enums.PartnerLifecycleState;
 import com.thalicloud.delivery.enums.VehicleType;
 import lombok.Builder;
@@ -23,8 +24,14 @@ public class PartnerProfileResponse {
     private final VehicleType vehicleType;
     private final String vehicleNumber;
     private final String vehicleModel;
+    private final String bankAccountHolderName;
+    private final String bankAccountNumber;
+    private final String bankIfscCode;
+    private final String upiId;
     private final PartnerLifecycleState lifecycleState;
     private final boolean registrationComplete;
+    private final DutyStatus dutyStatus;
+    private final Double rating;
     private final List<DocumentResponse> documents;
 
     public static PartnerProfileResponse from(DeliveryPartner partner, List<DocumentResponse> documents) {
@@ -39,8 +46,14 @@ public class PartnerProfileResponse {
                 .vehicleType(partner.getVehicleType())
                 .vehicleNumber(partner.getVehicleNumber())
                 .vehicleModel(partner.getVehicleModel())
+                .bankAccountHolderName(partner.getBankAccountHolderName())
+                .bankAccountNumber(partner.getBankAccountNumber())
+                .bankIfscCode(partner.getBankIfscCode())
+                .upiId(partner.getUpiId())
                 .lifecycleState(partner.getLifecycleState())
                 .registrationComplete(partner.isRegistrationComplete())
+                .dutyStatus(partner.getDutyStatus())
+                .rating(partner.getRating())
                 .documents(documents)
                 .build();
     }

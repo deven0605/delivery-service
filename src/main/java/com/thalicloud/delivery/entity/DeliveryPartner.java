@@ -1,5 +1,6 @@
 package com.thalicloud.delivery.entity;
 
+import com.thalicloud.delivery.enums.DutyStatus;
 import com.thalicloud.delivery.enums.PartnerLifecycleState;
 import com.thalicloud.delivery.enums.VehicleType;
 import jakarta.persistence.*;
@@ -60,6 +61,19 @@ public class DeliveryPartner implements UserDetails {
     @Column(length = 100)
     private String vehicleModel;
 
+    // ── M2.4 Bank Details — either the bank trio or upiId is sufficient (FR-2.8) ──
+    @Column(length = 100)
+    private String bankAccountHolderName;
+
+    @Column(length = 30)
+    private String bankAccountNumber;
+
+    @Column(length = 15)
+    private String bankIfscCode;
+
+    @Column(length = 100)
+    private String upiId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 25)
     private PartnerLifecycleState lifecycleState;
@@ -67,8 +81,26 @@ public class DeliveryPartner implements UserDetails {
     @Column(nullable = false)
     private boolean registrationComplete;
 
+    // ── M3.1 Availability ───────────────────────────────────────────────────
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 15)
+    private DutyStatus dutyStatus = DutyStatus.OFFLINE;
+
+    private Double currentLatitude;
+
+    private Double currentLongitude;
+
+    private LocalDateTime lastLocationAt;
+
+    // ── M3.2 Dashboard — no rating engine yet; starts at the platform default. ──
+    private Double rating = 5.0;
+
+    // ── M4.2 — FR-4.8: raw counters backing a future cancellation-rate metric. ──
     @Column(nullable = false)
-    private boolean onDuty;
+    private int totalAssignments;
+
+    @Column(nullable = false)
+    private int cancelledAssignments;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;

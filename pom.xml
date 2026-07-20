@@ -45,6 +45,12 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- STOMP over WebSocket — location publish (FR-3.3) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+
         <!-- Shared H2 file database — auth-service owns ddl-auto:create for the
              delivery_partners table; this service owns kyc_documents. -->
         <dependency>

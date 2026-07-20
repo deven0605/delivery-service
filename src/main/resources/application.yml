@@ -54,6 +54,19 @@ document:
   max-file-size-bytes: 5242880   # 5 MB
   allowed-content-types: image/jpeg,image/png,application/pdf
 
+# M4.1 — Phase 1 dev-only shared secret for the internal assignment-dispatch
+# endpoints (POST /api/delivery/internal/assignments/**). There's no real
+# dispatcher/order-service integration yet (see InternalAssignmentController),
+# so this is a placeholder in the same spirit as the hardcoded OTP — in
+# production these routes would sit behind service-to-service auth and not be
+# reachable from the public gateway at all.
+internal:
+  dispatch-key: dev-only-internal-dispatch-key
+
+# FR-4.3 — default countdown before an unactioned offer auto-expires.
+assignment:
+  offer-ttl-seconds: 20
+
 management:
   endpoints:
     web:

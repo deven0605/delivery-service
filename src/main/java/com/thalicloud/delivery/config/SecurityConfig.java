@@ -22,6 +22,15 @@ public class SecurityConfig {
     private static final String[] PUBLIC_ENDPOINTS = {
             "/actuator/health",
             "/h2-console/**",
+            // STOMP CONNECT carries the JWT as a frame header, not an HTTP
+            // Authorization header — StompAuthChannelInterceptor authenticates
+            // the session instead of JwtAuthFilter, so the handshake itself
+            // must be reachable pre-auth.
+            "/ws/**",
+            // M4 — dispatcher-facing, not partner-facing: no partner JWT to
+            // check here. InternalAssignmentController does its own
+            // X-Internal-Key check instead. See its class comment.
+            "/api/delivery/internal/**",
     };
 
     @Bean

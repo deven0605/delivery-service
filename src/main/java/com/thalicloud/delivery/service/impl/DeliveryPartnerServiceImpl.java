@@ -1,8 +1,11 @@
 package com.thalicloud.delivery.service.impl;
 
+import com.thalicloud.delivery.dto.request.BankDetailsRequest;
 import com.thalicloud.delivery.dto.request.Base64FileRequest;
+import com.thalicloud.delivery.dto.request.DutyStatusRequest;
 import com.thalicloud.delivery.dto.request.PersonalDetailsRequest;
 import com.thalicloud.delivery.dto.request.VehicleDetailsRequest;
+import com.thalicloud.delivery.dto.response.DashboardSummaryResponse;
 import com.thalicloud.delivery.dto.response.DocumentResponse;
 import com.thalicloud.delivery.dto.response.PartnerProfileResponse;
 import com.thalicloud.delivery.entity.DeliveryPartner;
@@ -10,10 +13,13 @@ import com.thalicloud.delivery.entity.KYCDocument;
 import com.thalicloud.delivery.enums.DocumentSide;
 import com.thalicloud.delivery.enums.DocumentStatus;
 import com.thalicloud.delivery.enums.DocumentType;
+import com.thalicloud.delivery.enums.AssignmentStatus;
+import com.thalicloud.delivery.enums.DutyStatus;
 import com.thalicloud.delivery.enums.PartnerLifecycleState;
 import com.thalicloud.delivery.exception.FileValidationException;
 import com.thalicloud.delivery.exception.RegistrationIncompleteException;
 import com.thalicloud.delivery.exception.ResourceNotFoundException;
+import com.thalicloud.delivery.repository.DeliveryAssignmentRepository;
 import com.thalicloud.delivery.repository.DeliveryPartnerRepository;
 import com.thalicloud.delivery.repository.KYCDocumentRepository;
 import com.thalicloud.delivery.service.DeliveryPartnerService;
@@ -49,6 +55,7 @@ public class DeliveryPartnerServiceImpl implements DeliveryPartnerService {
     private final DeliveryPartnerRepository partnerRepository;
     private final KYCDocumentRepository documentRepository;
     private final DocumentStorageService documentStorageService;
+    private final DeliveryAssignmentRepository assignmentRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -110,6 +117,38 @@ public class DeliveryPartnerServiceImpl implements DeliveryPartnerService {
 
     @Override
     @Transactional
+    public PartnerProfileResponse saveBankDetails(UUID partnerId, BankDetailsRequest request) {
+        DeliveryPartner partner = findPartner(partnerId);
+
+        boolean hasUpi = request.getUpiId() != null && !request.getUpiId().isBlank();
+        boolean hasBankTrio = request.getAccountHolderName() != null && !request.getAccountHolderName().isBlank()
+                && request.getAccountNumber() != null && !request.getAccountNumber().isBlank()
+                && request.getIfscCode() != null && !request.getIfscCode().isBlank();
+
+        // FR-2.8 — either the bank trio or a UPI id is sufficient.
+        if (!hasUpi && !hasBankTrio) {
+            throw new IllegalArgumentException(
+                    "Provide either a UPI ID or Account Holder Name, Account Number and IFSC Code.");
+        }
+
+        if (hasBankTrio) {
+            partner.setBankAccountHolderName(request.getAccountHolderName().trim());
+            partner.setBankAccountNumber(request.getAccountNumber().trim());
+            partner.setBankIfscCode(request.getIfscCode().trim().toUpperCase());
+        } else {
+            partner.setBankAccountHolderName(null);
+            partner.setBankAccountNumber(null);
+            partner.setBankIfscCode(null);
+        }
+        partner.setUpiId(hasUpi ? request.getUpiId().trim() : null);
+        partner.setUpdatedAt(LocalDateTime.now());
+        partnerRepository.save(partner);
+
+        return PartnerProfileResponse.from(partner, listDocuments(partnerId));
+    }
+
+    @Override
+    @Transactional
     public DocumentResponse uploadDocument(UUID partnerId, DocumentType type, DocumentSide side, Base64FileRequest file) {
         DeliveryPartner partner = findPartner(partnerId);
         validateDocumentShape(partner, type, side);
@@ -158,6 +197,14 @@ public class DeliveryPartnerServiceImpl implements DeliveryPartnerService {
         if (partner.getVehicleType() == null) {
             missing.add("Vehicle details");
         }
+        // FR-2.8 — either the bank trio or a UPI id must be on file before submitting.
+        boolean hasUpi = partner.getUpiId() != null && !partner.getUpiId().isBlank();
+        boolean hasBankTrio = partner.getBankAccountHolderName() != null && !partner.getBankAccountHolderName().isBlank()
+                && partner.getBankAccountNumber() != null && !partner.getBankAccountNumber().isBlank()
+                && partner.getBankIfscCode() != null && !partner.getBankIfscCode().isBlank();
+        if (!hasUpi && !hasBankTrio) {
+            missing.add("Bank details");
+        }
 
         List<KYCDocument> uploaded = documentRepository.findByPartnerId(partnerId);
         List<RequiredDoc> required = new ArrayList<>(ALWAYS_REQUIRED);
@@ -183,6 +230,63 @@ public class DeliveryPartnerServiceImpl implements DeliveryPartnerService {
         partnerRepository.save(partner);
 
         return PartnerProfileResponse.from(partner, listDocuments(partnerId));
+    }
+
+    @Override
+    @Transactional
+    public PartnerProfileResponse updateDutyStatus(UUID partnerId, DutyStatusRequest request) {
+        DeliveryPartner partner = findPartner(partnerId);
+        DutyStatus requested = request.getStatus();
+
+        // FR-3.1/FR-3.4 — the partner may only ever request these two states
+        // directly; ON_DELIVERY is reserved for the (future) assignment flow.
+        if (requested != DutyStatus.ONLINE && requested != DutyStatus.OFFLINE) {
+            throw new IllegalArgumentException("Status must be ONLINE or OFFLINE.");
+        }
+        if (requested == DutyStatus.ONLINE && partner.getLifecycleState() != PartnerLifecycleState.APPROVED) {
+            throw new IllegalArgumentException("Only approved partners can go online.");
+        }
+        if (requested == DutyStatus.OFFLINE && partner.getDutyStatus() == DutyStatus.ON_DELIVERY) {
+            throw new IllegalArgumentException("You can't go offline while on a delivery.");
+        }
+
+        partner.setDutyStatus(requested);
+        partner.setUpdatedAt(LocalDateTime.now());
+        partnerRepository.save(partner);
+
+        return PartnerProfileResponse.from(partner, listDocuments(partnerId));
+    }
+
+    @Override
+    @Transactional
+    public void updateLocation(UUID partnerId, double latitude, double longitude) {
+        DeliveryPartner partner = findPartner(partnerId);
+        partner.setCurrentLatitude(latitude);
+        partner.setCurrentLongitude(longitude);
+        partner.setLastLocationAt(LocalDateTime.now());
+        partnerRepository.save(partner);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public DashboardSummaryResponse getDashboardSummary(UUID partnerId) {
+        DeliveryPartner partner = findPartner(partnerId);
+
+        // FR-3.6 — todayDeliveries/todayEarningsPaise are still always 0: there's
+        // still no completed-order<->earnings model anywhere (that's M5/M6).
+        // FR-3.8/M4 — activeDelivery now reflects a real ACCEPTED assignment.
+        DashboardSummaryResponse.ActiveDeliveryResponse activeDelivery = assignmentRepository
+                .findFirstByPartnerIdAndStatusOrderByOfferedAtDesc(partnerId, AssignmentStatus.ACCEPTED)
+                .map(DashboardSummaryResponse.ActiveDeliveryResponse::from)
+                .orElse(null);
+
+        return DashboardSummaryResponse.builder()
+                .dutyStatus(partner.getDutyStatus())
+                .todayDeliveries(0)
+                .todayEarningsPaise(0L)
+                .rating(partner.getRating())
+                .activeDelivery(activeDelivery)
+                .build();
     }
 
     // ── Private helpers ───────────────────────────────────────────────────────
