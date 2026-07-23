@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.thalicloud.delivery.DeliveryServiceApplicationTests
+-------------------------------------------------------------------------------
+Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 34.27 s -- in com.thalicloud.delivery.DeliveryServiceApplicationTests

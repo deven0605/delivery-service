@@ -7,7 +7,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -171,7 +170,12 @@ public class DeliveryAssignment {
     // survives through to history detail.
     private LocalDateTime acceptedAt;
 
-    private static final SecureRandom PICKUP_CODE_RNG = new SecureRandom();
+    // Phase 1 placeholder — there's no SMS/push channel anywhere in this
+    // workspace to actually deliver a real code to the kitchen/customer, so
+    // both codes are hardcoded rather than randomly generated. Same spirit as
+    // auth-service's hardcoded login OTP; replace with real codes + real
+    // delivery once that infra exists.
+    private static final String PLACEHOLDER_OTP = "1234";
 
     @PrePersist
     protected void onCreate() {
@@ -182,10 +186,10 @@ public class DeliveryAssignment {
             status = AssignmentStatus.OFFERED;
         }
         if (pickupCode == null) {
-            pickupCode = String.format("%04d", PICKUP_CODE_RNG.nextInt(10000));
+            pickupCode = PLACEHOLDER_OTP;
         }
         if (deliveryOtp == null) {
-            deliveryOtp = String.format("%04d", PICKUP_CODE_RNG.nextInt(10000));
+            deliveryOtp = PLACEHOLDER_OTP;
         }
     }
 }

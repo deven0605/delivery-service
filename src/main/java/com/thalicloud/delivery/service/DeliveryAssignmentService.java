@@ -1,7 +1,9 @@
 package com.thalicloud.delivery.service;
 
 import com.thalicloud.delivery.dto.request.CreateAssignmentRequest;
+import com.thalicloud.delivery.dto.request.DispatchOrderRequest;
 import com.thalicloud.delivery.dto.response.AssignmentResponse;
+import com.thalicloud.delivery.dto.response.DispatchOrderResponse;
 import com.thalicloud.delivery.enums.CancelledBy;
 
 import java.util.Optional;
@@ -12,6 +14,11 @@ public interface DeliveryAssignmentService {
     // FR-4.1/FR-4.6 — rejects if the partner already has an active offer/assignment,
     // or isn't ONLINE. Pushes the offer to /topic/partner/{partnerId}/request.
     AssignmentResponse createAssignment(CreateAssignmentRequest request);
+
+    // Order-service-facing (see InternalAssignmentController) — picks the first
+    // ONLINE partner with no active assignment and offers them the delivery.
+    // Returns assigned=false (not an error) if no partner is currently available.
+    DispatchOrderResponse dispatchOrder(DispatchOrderRequest request);
 
     // Resume support — lets the app recover an in-flight OFFERED/ACCEPTED
     // assignment after a restart.

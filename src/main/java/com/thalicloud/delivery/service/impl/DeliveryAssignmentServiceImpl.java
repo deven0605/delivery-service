@@ -1,7 +1,10 @@
 package com.thalicloud.delivery.service.impl;
 
+import com.thalicloud.delivery.client.OrderStatusCallbackClient;
 import com.thalicloud.delivery.dto.request.CreateAssignmentRequest;
+import com.thalicloud.delivery.dto.request.DispatchOrderRequest;
 import com.thalicloud.delivery.dto.response.AssignmentResponse;
+import com.thalicloud.delivery.dto.response.DispatchOrderResponse;
 import com.thalicloud.delivery.entity.DeliveryAssignment;
 import com.thalicloud.delivery.entity.DeliveryPartner;
 import com.thalicloud.delivery.enums.AssignmentStatus;
@@ -51,6 +54,7 @@ public class DeliveryAssignmentServiceImpl implements DeliveryAssignmentService 
     private final SimpMessagingTemplate messagingTemplate;
     private final DocumentStorageService documentStorageService;
     private final NotificationService notificationService;
+    private final OrderStatusCallbackClient orderStatusCallbackClient;
 
     @Value("${assignment.offer-ttl-seconds}")
     private long offerTtlSeconds;
@@ -123,6 +127,63 @@ public class DeliveryAssignmentServiceImpl implements DeliveryAssignmentService 
                 "New delivery request", "%s → %s".formatted(assignment.getKitchenName(), assignment.getDropLocality()),
                 assignment.getId().toString());
         return response;
+    }
+
+    @Override
+    @Transactional
+    public DispatchOrderResponse dispatchOrder(DispatchOrderRequest request) {
+        // No geo/zone matching engine exists yet (see CreateAssignmentRequest's
+        // own docs) — pick the first ONLINE partner with no active assignment.
+        Optional<DeliveryPartner> candidate = partnerRepository.findByDutyStatus(DutyStatus.ONLINE).stream()
+                .filter(p -> assignmentRepository
+                        .findFirstByPartnerIdAndStatusInOrderByOfferedAtDesc(p.getId(), ACTIVE_STATUSES)
+                        .isEmpty())
+                .findFirst();
+
+        if (candidate.isEmpty()) {
+            return new DispatchOrderResponse(false, null, null, "No delivery partner available right now.");
+        }
+
+        DeliveryPartner partner = candidate.get();
+        LocalDateTime now = LocalDateTime.now();
+
+        DeliveryAssignment assignment = new DeliveryAssignment();
+        assignment.setPartner(partner);
+        assignment.setOrderId(request.getOrderId());
+        assignment.setKitchenName(request.getKitchenName());
+        // Phase 1 placeholders — order-service doesn't have kitchen geo-coordinates
+        // or a real fare/distance engine (see DeliveryDispatchClient's own docs).
+        assignment.setKitchenDistanceKm(0.0);
+        assignment.setKitchenLatitude(0.0);
+        assignment.setKitchenLongitude(0.0);
+        assignment.setKitchenContactNumber(request.getKitchenContactNumber());
+        assignment.setDropLocality(request.getDropAddress());
+        assignment.setDropLatitude(request.getDropLatitude());
+        assignment.setDropLongitude(request.getDropLongitude());
+        assignment.setCustomerContactNumber(request.getCustomerContactNumber());
+        assignment.setEstimatedDistanceKm(0.0);
+        assignment.setItemCount(request.getItemCount());
+        assignment.setEstimatedPayoutPaise(request.getDeliveryChargePaise());
+        assignment.setBaseFarePaise(request.getDeliveryChargePaise());
+        assignment.setDistanceFarePaise(0L);
+        assignment.setIncentivePaise(0L);
+        assignment.setPaymentMethod(request.getPaymentMethod());
+        assignment.setCodAmountPaise(request.getPaymentMethod() == PaymentMethod.COD ? request.getCodAmountPaise() : null);
+        assignment.setStatus(AssignmentStatus.OFFERED);
+        assignment.setOfferedAt(now);
+        assignment.setExpiresAt(now.plusSeconds(offerTtlSeconds));
+        assignmentRepository.save(assignment);
+
+        partner.setTotalAssignments(partner.getTotalAssignments() + 1);
+        partnerRepository.save(partner);
+
+        AssignmentResponse response = AssignmentResponse.from(assignment);
+        messagingTemplate.convertAndSend("/topic/partner/" + partner.getId() + "/request", response);
+        notificationService.notify(partner.getId(), NotificationType.NEW_ASSIGNMENT,
+                "New delivery request", "%s → %s".formatted(assignment.getKitchenName(), assignment.getDropLocality()),
+                assignment.getId().toString());
+
+        return new DispatchOrderResponse(true, assignment.getId(), partner.getId(), "Assignment offered");
     }
 
     @Override
@@ -225,12 +286,14 @@ public class DeliveryAssignmentServiceImpl implements DeliveryAssignmentService 
             throw new IllegalArgumentException("Incorrect pickup code. Please check with the kitchen and try again.");
         }
 
-        // FR-5.6 — order status transitions to PICKED_UP (Order-Service isn't
-        // wired to a real delivery-partner-facing status callback yet, same
-        // gap noted on DeliveryAssignment; recorded here as the source of truth).
+        // FR-5.6
         assignment.setStatus(AssignmentStatus.PICKED_UP);
         assignment.setPickedUpAt(LocalDateTime.now());
         assignmentRepository.save(assignment);
+
+        // Best-effort: order-service reflects this as DISPATCHED ("Partner
+        // Assigned"/"Out for Delivery") — see OrderStatusCallbackClient.
+        orderStatusCallbackClient.updateOrderStatus(assignment.getOrderId(), "DISPATCHED");
 
         return AssignmentResponse.from(assignment);
     }
@@ -374,6 +437,10 @@ public class DeliveryAssignmentServiceImpl implements DeliveryAssignmentService 
         DeliveryPartner partner = assignment.getPartner();
         partner.setDutyStatus(DutyStatus.ONLINE);
         partnerRepository.save(partner);
+
+        // Best-effort: order-service flips the order to DELIVERED — see
+        // OrderStatusCallbackClient.
+        orderStatusCallbackClient.updateOrderStatus(assignment.getOrderId(), "DELIVERED");
 
         return AssignmentResponse.from(assignment);
     }

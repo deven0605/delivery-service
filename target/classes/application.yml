@@ -55,13 +55,20 @@ document:
   allowed-content-types: image/jpeg,image/png,application/pdf
 
 # M4.1 — Phase 1 dev-only shared secret for the internal assignment-dispatch
-# endpoints (POST /api/delivery/internal/assignments/**). There's no real
-# dispatcher/order-service integration yet (see InternalAssignmentController),
-# so this is a placeholder in the same spirit as the hardcoded OTP — in
-# production these routes would sit behind service-to-service auth and not be
-# reachable from the public gateway at all.
+# endpoints (POST /api/delivery/internal/assignments/**, /api/delivery/internal/dispatch).
+# order-service now calls the latter when a vendor accepts an order (see
+# OrderDispatchController), and this service calls back into order-service's
+# own internal endpoint after a pickup/delivery OTP match (see
+# OrderStatusCallbackClient) — both directions share this same dev secret.
+# Same placeholder spirit as the hardcoded OTP — in production these routes
+# would sit behind service-to-service auth and not be reachable from the
+# public gateway at all.
 internal:
   dispatch-key: dev-only-internal-dispatch-key
+
+services:
+  order-service:
+    base-url: http://localhost:8083
 
 # FR-4.3 — default countdown before an unactioned offer auto-expires.
 assignment:
