@@ -2,14 +2,24 @@ package com.thalicloud.delivery.controller;
 
 import com.thalicloud.delivery.dto.request.BankDetailsRequest;
 import com.thalicloud.delivery.dto.request.DutyStatusRequest;
+import com.thalicloud.delivery.dto.request.EditProfileRequest;
 import com.thalicloud.delivery.dto.request.PersonalDetailsRequest;
+import com.thalicloud.delivery.dto.request.RemitCashRequest;
 import com.thalicloud.delivery.dto.request.UploadDocumentRequest;
 import com.thalicloud.delivery.dto.request.VehicleDetailsRequest;
 import com.thalicloud.delivery.dto.response.ApiResponse;
+import com.thalicloud.delivery.dto.response.CashInHandResponse;
 import com.thalicloud.delivery.dto.response.DashboardSummaryResponse;
+import com.thalicloud.delivery.dto.response.DeliveryFeedbackResponse;
+import com.thalicloud.delivery.dto.response.DeliveryHistoryDetailResponse;
+import com.thalicloud.delivery.dto.response.DeliveryHistoryItemResponse;
 import com.thalicloud.delivery.dto.response.DocumentResponse;
+import com.thalicloud.delivery.dto.response.EarningsSummaryResponse;
+import com.thalicloud.delivery.dto.response.PageResponse;
 import com.thalicloud.delivery.dto.response.PartnerProfileResponse;
+import com.thalicloud.delivery.dto.response.PayoutResponse;
 import com.thalicloud.delivery.entity.DeliveryPartner;
+import com.thalicloud.delivery.enums.EarningsPeriod;
 import com.thalicloud.delivery.service.DeliveryPartnerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +28,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.UUID;
 
 // M2 — Registration & KYC Onboarding (FR-2.1 - FR-2.9).
 // Every endpoint acts on the caller's own profile, resolved from the JWT
@@ -44,6 +55,15 @@ public class DeliveryPartnerController {
                 System.out.println("Saving personal details for partner ID: " + partner.getId());
         return ResponseEntity.ok(ApiResponse.success(
                 "Personal details saved", deliveryPartnerService.savePersonalDetails(partner.getId(), request)));
+    }
+
+    /** PUT /api/delivery/partners/me/profile — FR-11.3 (email/profile photo, both optional). */
+    @PutMapping("/profile")
+    public ResponseEntity<ApiResponse<PartnerProfileResponse>> editProfile(
+            @Valid @RequestBody EditProfileRequest request,
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Profile updated", deliveryPartnerService.editProfile(partner.getId(), request)));
     }
 
     /** PUT /api/delivery/partners/me/vehicle — FR-2.2/FR-2.3. */
@@ -102,5 +122,68 @@ public class DeliveryPartnerController {
     public ResponseEntity<ApiResponse<DashboardSummaryResponse>> getDashboardSummary(
             @AuthenticationPrincipal DeliveryPartner partner) {
         return ResponseEntity.ok(ApiResponse.success("OK", deliveryPartnerService.getDashboardSummary(partner.getId())));
+    }
+
+    /** GET /api/delivery/partners/me/cash-in-hand — FR-7.3. */
+    @GetMapping("/cash-in-hand")
+    public ResponseEntity<ApiResponse<CashInHandResponse>> getCashInHand(
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        return ResponseEntity.ok(ApiResponse.success("OK", deliveryPartnerService.getCashInHand(partner.getId())));
+    }
+
+    /** POST /api/delivery/partners/me/cash-in-hand/remit — FR-7.3/FR-7.4. */
+    @PostMapping("/cash-in-hand/remit")
+    public ResponseEntity<ApiResponse<CashInHandResponse>> remitCash(
+            @Valid @RequestBody RemitCashRequest request,
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "Submitted for review", deliveryPartnerService.remitCash(partner.getId(), request.getMethod())));
+    }
+
+    /** GET /api/delivery/partners/me/earnings?period=today|week|month — FR-8.1/FR-8.2. */
+    @GetMapping("/earnings")
+    public ResponseEntity<ApiResponse<EarningsSummaryResponse>> getEarningsSummary(
+            @RequestParam(defaultValue = "today") String period,
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        EarningsPeriod parsed;
+        try {
+            parsed = EarningsPeriod.valueOf(period.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(ApiResponse.error("period must be one of: today, week, month"));
+        }
+        return ResponseEntity.ok(ApiResponse.success("OK", deliveryPartnerService.getEarningsSummary(partner.getId(), parsed)));
+    }
+
+    /** GET /api/delivery/partners/me/payouts — FR-8.4. */
+    @GetMapping("/payouts")
+    public ResponseEntity<ApiResponse<List<PayoutResponse>>> getPayoutHistory(
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        return ResponseEntity.ok(ApiResponse.success("OK", deliveryPartnerService.getPayoutHistory(partner.getId())));
+    }
+
+    /** GET /api/delivery/partners/me/deliveries/history?page=0&size=20 — FR-9.1/FR-9.3. */
+    @GetMapping("/deliveries/history")
+    public ResponseEntity<ApiResponse<PageResponse<DeliveryHistoryItemResponse>>> getDeliveryHistory(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size,
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "OK", deliveryPartnerService.getDeliveryHistory(partner.getId(), page, size)));
+    }
+
+    /** GET /api/delivery/partners/me/deliveries/history/{assignmentId} — FR-9.2. */
+    @GetMapping("/deliveries/history/{assignmentId}")
+    public ResponseEntity<ApiResponse<DeliveryHistoryDetailResponse>> getDeliveryHistoryDetail(
+            @PathVariable UUID assignmentId,
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        return ResponseEntity.ok(ApiResponse.success(
+                "OK", deliveryPartnerService.getDeliveryHistoryDetail(partner.getId(), assignmentId)));
+    }
+
+    /** GET /api/delivery/partners/me/feedback — FR-10.2. */
+    @GetMapping("/feedback")
+    public ResponseEntity<ApiResponse<List<DeliveryFeedbackResponse>>> getRecentFeedback(
+            @AuthenticationPrincipal DeliveryPartner partner) {
+        return ResponseEntity.ok(ApiResponse.success("OK", deliveryPartnerService.getRecentFeedback(partner.getId())));
     }
 }

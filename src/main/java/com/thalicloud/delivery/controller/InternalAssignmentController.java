@@ -1,6 +1,7 @@
 package com.thalicloud.delivery.controller;
 
 import com.thalicloud.delivery.dto.request.CreateAssignmentRequest;
+import com.thalicloud.delivery.dto.request.RateDeliveryRequest;
 import com.thalicloud.delivery.dto.request.SystemCancelRequest;
 import com.thalicloud.delivery.dto.response.ApiResponse;
 import com.thalicloud.delivery.dto.response.AssignmentResponse;
@@ -58,7 +59,20 @@ public class InternalAssignmentController {
                 "Assignment cancelled", assignmentService.systemCancel(id, request.getCancelledBy())));
     }
 
-    private ResponseEntity<ApiResponse<AssignmentResponse>> requireValidKey(String key) {
+    /** POST /api/delivery/internal/assignments/{id}/rating — FR-10.1/FR-10.2. */
+    @PostMapping("/{id}/rating")
+    public ResponseEntity<ApiResponse<Void>> rateDelivery(
+            @RequestHeader(value = "X-Internal-Key", required = false) String key,
+            @PathVariable UUID id,
+            @Valid @RequestBody RateDeliveryRequest request) {
+        ResponseEntity<ApiResponse<Void>> denied = requireValidKey(key);
+        if (denied != null) return denied;
+
+        assignmentService.rateDelivery(id, request.getRating(), request.getFeedback());
+        return ResponseEntity.ok(ApiResponse.success("Rating recorded", null));
+    }
+
+    private <T> ResponseEntity<ApiResponse<T>> requireValidKey(String key) {
         if (key == null || !key.equals(dispatchKey)) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.error("Invalid or missing X-Internal-Key"));
         }

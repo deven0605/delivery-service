@@ -102,6 +102,10 @@ public class DeliveryPartner implements UserDetails {
     @Column(nullable = false)
     private int cancelledAssignments;
 
+    // ── M7 — Cash on Delivery (COD) Collection ──────────────────────────────
+    @Column(nullable = false)
+    private long cashInHandPaise;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

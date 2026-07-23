@@ -67,6 +67,21 @@ internal:
 assignment:
   offer-ttl-seconds: 20
 
+# FR-7.3 — Cash in Hand must reach this before "Remit to ThaliCloud" is available.
+cash:
+  remittance-threshold-paise: 200000   # ₹2,000 default
+
+# FR-10.3 — below this, the Home dashboard shows an advisory banner (no
+# auto-suspension in Phase 1).
+rating:
+  low-threshold: 3.5
+
+# M13/FR-13.3 — backs the SOS/"Call Support" shortcut shown during an active
+# delivery. Phase 1 placeholder number/mailbox, same spirit as the hardcoded OTP.
+support:
+  phone-number: "+911800123456"
+  email: partner-support@thalicloud.example
+
 management:
   endpoints:
     web:

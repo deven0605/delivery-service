@@ -23,6 +23,32 @@ public interface DeliveryAssignmentService {
     // FR-4.4/FR-4.5
     AssignmentResponse decline(UUID partnerId, UUID assignmentId);
 
+    // FR-5.4 — records arrival at the kitchen; location is best-effort (may be null).
+    AssignmentResponse arriveAtKitchen(UUID partnerId, UUID assignmentId, Double latitude, Double longitude);
+
+    // FR-5.5/FR-5.6 — verifies the 4-digit pickup code (typed or scanned from a QR
+    // code) and transitions the assignment to PICKED_UP.
+    AssignmentResponse verifyPickup(UUID partnerId, UUID assignmentId, String code);
+
+    // FR-6.1 — PICKED_UP -> OUT_FOR_DELIVERY, marking the start of the drop leg.
+    AssignmentResponse startDropNavigation(UUID partnerId, UUID assignmentId);
+
+    // FR-6.3 — records arrival at the drop location; location is best-effort (may be null).
+    AssignmentResponse arriveAtDrop(UUID partnerId, UUID assignmentId, Double latitude, Double longitude);
+
+    // FR-6.5 — uploads a Contactless Drop proof-of-delivery photo; doesn't change status.
+    AssignmentResponse uploadDropPhoto(UUID partnerId, UUID assignmentId, String fileName, String contentType, byte[] data);
+
+    // FR-7.2 — marks the COD amount as collected and credits it to the
+    // partner's Cash in Hand balance; verifyDelivery requires this first for
+    // COD assignments (FR-7.1).
+    AssignmentResponse markCashCollected(UUID partnerId, UUID assignmentId);
+
+    // FR-6.4/FR-6.5/FR-6.6/FR-6.7 — verifies the delivery OTP (or, if contactless,
+    // requires an already-uploaded proof photo), transitions to DELIVERED, and
+    // releases the partner back to ONLINE.
+    AssignmentResponse verifyDelivery(UUID partnerId, UUID assignmentId, String otp, boolean contactless);
+
     // FR-4.8 — releases the partner back to ONLINE and records the cancellation.
     AssignmentResponse requestCancellation(UUID partnerId, UUID assignmentId, String reason);
 
@@ -32,4 +58,9 @@ public interface DeliveryAssignmentService {
 
     // FR-4.3/FR-4.5 — sweeps OFFERED assignments whose countdown ran out.
     void expireStaleOffers();
+
+    // M10/FR-10.1/FR-10.2 — internal/order-service-facing (see
+    // InternalAssignmentController). Only a DELIVERED assignment may be rated;
+    // recomputes the partner's rolling average rating afterward.
+    void rateDelivery(UUID assignmentId, int rating, String feedback);
 }
