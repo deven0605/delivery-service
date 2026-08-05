@@ -45,8 +45,8 @@ jwt:
 # Local MinIO (Tech Stack: "Document Upload — local MinIO now, AWS S3 future).
 minio:
   endpoint: http://localhost:9000
-  access-key: admin
-  secret-key: password123
+  access-key: minioadmin
+  secret-key: minioadmin
   bucket: delivery-kyc-documents
 
 # FR-2.6 — enforced again server-side (client-side check alone is not trustworthy).
@@ -72,7 +72,7 @@ services:
 
 # FR-4.3 — default countdown before an unactioned offer auto-expires.
 assignment:
-  offer-ttl-seconds: 20
+  offer-ttl-seconds: 60
 
 # FR-7.3 — Cash in Hand must reach this before "Remit to ThaliCloud" is available.
 cash:
@@ -99,6 +99,10 @@ management:
       show-details: never
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%C{1}.%M:%L] - %msg%n"
+  file:
+    name: D:/logs/backend/delivery-service/.logs
   level:
     com.thalicloud: DEBUG
     org.springframework.security: INFO

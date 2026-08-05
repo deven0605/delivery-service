@@ -6,8 +6,11 @@ import com.thalicloud.delivery.dto.request.SystemCancelRequest;
 import com.thalicloud.delivery.dto.response.ApiResponse;
 import com.thalicloud.delivery.dto.response.AssignmentResponse;
 import com.thalicloud.delivery.service.DeliveryAssignmentService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,9 +30,11 @@ import java.util.UUID;
 // here instead. This is a Phase 1 placeholder, same spirit as the hardcoded
 // OTP: in production this route wouldn't be reachable from the public
 // gateway at all.
+@Slf4j
 @RestController
 @RequestMapping("/api/delivery/internal/assignments")
 @RequiredArgsConstructor
+@Tag(name = "Internal - Assignments", description = "Internal service-to-service endpoints (not for external/UI clients) for creating and cancelling delivery assignments and recording delivery ratings. Guarded by a shared X-Internal-Key header rather than partner JWT auth.")
 public class InternalAssignmentController {
 
     private final DeliveryAssignmentService assignmentService;
@@ -37,39 +42,76 @@ public class InternalAssignmentController {
     @Value("${internal.dispatch-key}")
     private String dispatchKey;
 
+    @Operation(summary = "Create a delivery assignment", description = "Internal endpoint used by a dispatcher/order-service integration to create a new delivery assignment offer for a partner and order. Requires a valid X-Internal-Key header.")
     @PostMapping
     public ResponseEntity<ApiResponse<AssignmentResponse>> createAssignment(
             @RequestHeader(value = "X-Internal-Key", required = false) String key,
             @Valid @RequestBody CreateAssignmentRequest request) {
-        ResponseEntity<ApiResponse<AssignmentResponse>> denied = requireValidKey(key);
-        if (denied != null) return denied;
+        log.info("createAssignment: start, partnerId={}, orderId={}", request.getPartnerId(), request.getOrderId());
+        try {
+            ResponseEntity<ApiResponse<AssignmentResponse>> denied = requireValidKey(key);
+            if (denied != null) {
+                log.info("createAssignment: end, partnerId={}, orderId={}, denied=true", request.getPartnerId(), request.getOrderId());
+                return denied;
+            }
 
-        return ResponseEntity.ok(ApiResponse.success("Assignment created", assignmentService.createAssignment(request)));
+            ResponseEntity<ApiResponse<AssignmentResponse>> response =
+                    ResponseEntity.ok(ApiResponse.success("Assignment created", assignmentService.createAssignment(request)));
+            log.info("createAssignment: end, partnerId={}, orderId={}", request.getPartnerId(), request.getOrderId());
+            return response;
+        } catch (Exception e) {
+            log.error("createAssignment: failed, partnerId={}, orderId={}", request.getPartnerId(), request.getOrderId(), e);
+            throw e;
+        }
     }
 
+    @Operation(summary = "System-cancel an assignment", description = "Internal endpoint used to force-cancel an assignment from outside the partner app (e.g. order cancelled upstream), recording who initiated the cancellation. Requires a valid X-Internal-Key header.")
     @PostMapping("/{id}/system-cancel")
     public ResponseEntity<ApiResponse<AssignmentResponse>> systemCancel(
             @RequestHeader(value = "X-Internal-Key", required = false) String key,
             @PathVariable UUID id,
             @Valid @RequestBody SystemCancelRequest request) {
-        ResponseEntity<ApiResponse<AssignmentResponse>> denied = requireValidKey(key);
-        if (denied != null) return denied;
+        log.info("systemCancel: start, assignmentId={}, cancelledBy={}", id, request.getCancelledBy());
+        try {
+            ResponseEntity<ApiResponse<AssignmentResponse>> denied = requireValidKey(key);
+            if (denied != null) {
+                log.info("systemCancel: end, assignmentId={}, denied=true", id);
+                return denied;
+            }
 
-        return ResponseEntity.ok(ApiResponse.success(
-                "Assignment cancelled", assignmentService.systemCancel(id, request.getCancelledBy())));
+            ResponseEntity<ApiResponse<AssignmentResponse>> response = ResponseEntity.ok(ApiResponse.success(
+                    "Assignment cancelled", assignmentService.systemCancel(id, request.getCancelledBy())));
+            log.info("systemCancel: end, assignmentId={}", id);
+            return response;
+        } catch (Exception e) {
+            log.error("systemCancel: failed, assignmentId={}", id, e);
+            throw e;
+        }
     }
 
+    @Operation(summary = "Record a delivery rating", description = "Internal endpoint used to attach a customer's rating and feedback text to a completed assignment. Requires a valid X-Internal-Key header.")
     /** POST /api/delivery/internal/assignments/{id}/rating — FR-10.1/FR-10.2. */
     @PostMapping("/{id}/rating")
     public ResponseEntity<ApiResponse<Void>> rateDelivery(
             @RequestHeader(value = "X-Internal-Key", required = false) String key,
             @PathVariable UUID id,
             @Valid @RequestBody RateDeliveryRequest request) {
-        ResponseEntity<ApiResponse<Void>> denied = requireValidKey(key);
-        if (denied != null) return denied;
+        log.info("rateDelivery: start, assignmentId={}, rating={}", id, request.getRating());
+        try {
+            ResponseEntity<ApiResponse<Void>> denied = requireValidKey(key);
+            if (denied != null) {
+                log.info("rateDelivery: end, assignmentId={}, denied=true", id);
+                return denied;
+            }
 
-        assignmentService.rateDelivery(id, request.getRating(), request.getFeedback());
-        return ResponseEntity.ok(ApiResponse.success("Rating recorded", null));
+            assignmentService.rateDelivery(id, request.getRating(), request.getFeedback());
+            ResponseEntity<ApiResponse<Void>> response = ResponseEntity.ok(ApiResponse.success("Rating recorded", null));
+            log.info("rateDelivery: end, assignmentId={}", id);
+            return response;
+        } catch (Exception e) {
+            log.error("rateDelivery: failed, assignmentId={}", id, e);
+            throw e;
+        }
     }
 
     private <T> ResponseEntity<ApiResponse<T>> requireValidKey(String key) {

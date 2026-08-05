@@ -7,6 +7,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.http.Method;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -17,6 +18,7 @@ import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class DocumentStorageServiceImpl implements DocumentStorageService {
 
     private final MinioClient minioClient;
@@ -32,6 +34,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
 
     @Override
     public String upload(String objectKey, byte[] data, String contentType) {
+        log.info("upload: start, objectKey={}, contentType={}", objectKey, contentType);
         validate(data, contentType);
 
         try (ByteArrayInputStream in = new ByteArrayInputStream(data)) {
@@ -46,7 +49,7 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
 
             // Bucket is private (KYC documents are sensitive PII) — a presigned URL
             // lets the app render the upload immediately without a public bucket.
-            return minioClient.getPresignedObjectUrl(
+            String url = minioClient.getPresignedObjectUrl(
                     GetPresignedObjectUrlArgs.builder()
                             .method(Method.GET)
                             .bucket(bucket)
@@ -54,11 +57,15 @@ public class DocumentStorageServiceImpl implements DocumentStorageService {
                             .expiry(7, TimeUnit.DAYS)
                             .build()
             );
+            log.info("upload: end, objectKey={}", objectKey);
+            return url;
         } catch (RuntimeException ex) {
+            log.error("upload: failed, objectKey={}", objectKey, ex);
             throw new IllegalStateException("Could not upload document to storage. Please retry.", ex);
         } catch (Exception ex) {
             // MinioClient's putObject/getPresignedObjectUrl declare several checked
             // storage-SDK exceptions — surfaced uniformly as a retryable failure.
+            log.error("upload: failed, objectKey={}", objectKey, ex);
             throw new IllegalStateException("Could not upload document to storage. Please retry.", ex);
         }
     }

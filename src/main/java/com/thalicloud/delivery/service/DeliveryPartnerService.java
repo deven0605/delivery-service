@@ -59,6 +59,10 @@ public interface DeliveryPartnerService {
     // FR-3.3 — persists the latest GPS fix published over STOMP.
     void updateLocation(UUID partnerId, double latitude, double longitude);
 
+    // M12/FR-12 — registers/replaces this device's Expo push token; overwrites
+    // any previous token for the partner (single active device per partner).
+    void updateDeviceToken(UUID partnerId, String expoPushToken);
+
     // FR-3.6/FR-3.8
     DashboardSummaryResponse getDashboardSummary(UUID partnerId);
 

@@ -31,6 +31,9 @@ public class SecurityConfig {
             // check here. InternalAssignmentController does its own
             // X-Internal-Key check instead. See its class comment.
             "/api/delivery/internal/**",
+            "/v3/api-docs/**",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
     };
 
     @Bean

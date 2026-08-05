@@ -13,6 +13,7 @@ import com.thalicloud.delivery.repository.DeliveryPartnerRepository;
 import com.thalicloud.delivery.repository.SupportIssueRepository;
 import com.thalicloud.delivery.service.SupportService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SupportServiceImpl implements SupportService {
@@ -76,48 +78,79 @@ public class SupportServiceImpl implements SupportService {
 
     @Override
     public List<FaqResponse> getFaqs() {
-        return FAQS;
+        log.info("getFaqs: start");
+        try {
+            log.info("getFaqs: end, count={}", FAQS.size());
+            return FAQS;
+        } catch (Exception e) {
+            log.error("getFaqs: failed", e);
+            throw e;
+        }
     }
 
     @Override
     public SupportConfigResponse getSupportConfig() {
-        return SupportConfigResponse.builder()
-                .supportPhoneNumber(supportPhoneNumber)
-                .supportEmail(supportEmail)
-                .build();
+        log.info("getSupportConfig: start");
+        try {
+            SupportConfigResponse response = SupportConfigResponse.builder()
+                    .supportPhoneNumber(supportPhoneNumber)
+                    .supportEmail(supportEmail)
+                    .build();
+            log.info("getSupportConfig: end");
+            return response;
+        } catch (Exception e) {
+            log.error("getSupportConfig: failed", e);
+            throw e;
+        }
     }
 
     @Override
     @Transactional
     public SupportIssueResponse reportIssue(UUID partnerId, IssueCategory category, String description, UUID assignmentId) {
-        DeliveryPartner partner = partnerRepository.findById(partnerId)
-                .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found"));
+        log.info("reportIssue: start, partnerId={}, category={}", partnerId, category);
+        try {
+            DeliveryPartner partner = partnerRepository.findById(partnerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("Delivery partner not found"));
 
-        // FR-13.2 — "tied to a specific delivery (optional)"; when supplied it
-        // must actually belong to this partner.
-        if (assignmentId != null) {
-            DeliveryAssignment assignment = assignmentRepository.findById(assignmentId)
-                    .orElseThrow(() -> new IllegalArgumentException("Delivery not found"));
-            if (!assignment.getPartner().getId().equals(partnerId)) {
-                throw new IllegalArgumentException("Delivery not found");
+            // FR-13.2 — "tied to a specific delivery (optional)"; when supplied it
+            // must actually belong to this partner.
+            if (assignmentId != null) {
+                DeliveryAssignment assignment = assignmentRepository.findById(assignmentId)
+                        .orElseThrow(() -> new IllegalArgumentException("Delivery not found"));
+                if (!assignment.getPartner().getId().equals(partnerId)) {
+                    throw new IllegalArgumentException("Delivery not found");
+                }
             }
+
+            SupportIssue issue = new SupportIssue();
+            issue.setPartner(partner);
+            issue.setCategory(category);
+            issue.setDescription(description);
+            issue.setAssignmentId(assignmentId);
+            supportIssueRepository.save(issue);
+
+            SupportIssueResponse response = SupportIssueResponse.from(issue);
+            log.info("reportIssue: end, partnerId={}, category={}", partnerId, category);
+            return response;
+        } catch (Exception e) {
+            log.error("reportIssue: failed, partnerId={}, category={}", partnerId, category, e);
+            throw e;
         }
-
-        SupportIssue issue = new SupportIssue();
-        issue.setPartner(partner);
-        issue.setCategory(category);
-        issue.setDescription(description);
-        issue.setAssignmentId(assignmentId);
-        supportIssueRepository.save(issue);
-
-        return SupportIssueResponse.from(issue);
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<SupportIssueResponse> getMyIssues(UUID partnerId) {
-        return supportIssueRepository.findByPartnerIdOrderByCreatedAtDesc(partnerId).stream()
-                .map(SupportIssueResponse::from)
-                .toList();
+        log.info("getMyIssues: start, partnerId={}", partnerId);
+        try {
+            List<SupportIssueResponse> response = supportIssueRepository.findByPartnerIdOrderByCreatedAtDesc(partnerId).stream()
+                    .map(SupportIssueResponse::from)
+                    .toList();
+            log.info("getMyIssues: end, partnerId={}", partnerId);
+            return response;
+        } catch (Exception e) {
+            log.error("getMyIssues: failed, partnerId={}", partnerId, e);
+            throw e;
+        }
     }
 }

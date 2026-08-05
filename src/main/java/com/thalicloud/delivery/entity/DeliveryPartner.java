@@ -74,6 +74,13 @@ public class DeliveryPartner implements UserDetails {
     @Column(length = 100)
     private String upiId;
 
+    // ── M12/FR-12 push notifications — Expo push token for this partner's
+    // current device, overwritten on every app foreground (see
+    // registerForPushNotificationsAsync on the client). Cleared automatically
+    // when Expo reports it as DeviceNotRegistered (see ExpoPushClient). ──────
+    @Column(length = 200)
+    private String expoPushToken;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 25)
     private PartnerLifecycleState lifecycleState;
